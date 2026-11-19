@@ -711,17 +711,17 @@ if not matched:
 worker.write_text(worker_source.replace(matched, new_cache), encoding='utf-8')
 
 
-# Temporary uploader diagnostics: inspect the current upload form and metadata flow.
-for source_name, source_text, terms in [
-    ("INDEX", index_source if "index_source" in globals() else html_source,
-     ("upload-title", "upload-description", "upload-category", "upload-tags", "Title", "Description", "Category", "Collection")),
-    ("APP", app_source,
-     ("processSelectedFiles", "upload-title", "upload-description", "upload-category", "upload-tags", "descriptor.title", "descriptor.category"))
+
+# Temporary uploader diagnostics: inspect complete renderer and metadata handlers.
+for term, limit in [
+    ("function renderUpload(prepare = false)", 9000),
+    ("async function processSelectedFiles(mode)", 10000),
+    ('document.addEventListener("change"', 3500),
+    ('document.addEventListener("click"', 3500)
 ]:
-    for term in terms:
-        pos = source_text.find(term)
-        if pos >= 0:
-            print("\\n--- UPLOADER " + source_name + " " + term + " ---")
-            print(source_text[max(0, pos-1000):min(len(source_text), pos+2400)])
+    pos = app_source.find(term)
+    if pos >= 0:
+        print("\\n--- UPLOAD FLOW " + term + " ---")
+        print(app_source[pos:pos+limit])
 
 print('Applied owner-session preservation and manual encrypted configuration import.')
