@@ -46,22 +46,7 @@ jobs:
           grep -q 'async uploadPair(pair)' public/modules/github.js
           grep -q 'upload-staging/' public/modules/github.js
           grep -q 'ready.json' public/modules/github.js
-          python3 - <<'PY'
-          from pathlib import Path
-          for name in ("public/app.js", "public/modules/github.js"):
-              text = Path(name).read_text(encoding="utf-8")
-              print(f"--- UPLOAD CALL TRACE: {name} ---")
-              for token in ("uploadPair", "uploadAsset", "uploadPdf", "processSelectedFiles", "state.token"):
-                  start = 0
-                  count = 0
-                  while count < 8:
-                      i = text.find(token, start)
-                      if i < 0:
-                          break
-                      print(text[max(0, i-220):min(len(text), i+360)].replace("\\n", " "))
-                      start = i + len(token)
-                      count += 1
-          PY
+          grep -q 'state.client.uploadPair(pair)' public/app.js
           node --input-type=module --check < public/app.js
           grep -q 'pdfjsLib.getDocument' public/app.js
           ! grep -q 'iframe class="reader-frame"' public/app.js
