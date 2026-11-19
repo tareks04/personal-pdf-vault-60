@@ -23,7 +23,7 @@ new = '''  async downloadAsset(asset) {
     try {
       response = await fetch(url, {
         method: "GET",
-        headers: this.headers({ Accept: "application/octet-stream" }),
+        headers: { Accept: "application/octet-stream" },
         cache: "no-store"
       });
     } catch {
@@ -49,7 +49,7 @@ module.write_text(source.replace(old, new), encoding='utf-8')
 worker = Path('public/service-worker.js')
 worker_source = worker.read_text(encoding='utf-8')
 old_caches = ('personal-pdf-vault-shell-v1', 'personal-pdf-vault-shell-v2-owner-lock')
-new_cache = 'personal-pdf-vault-shell-v3-release-asset-api'
+new_cache = 'personal-pdf-vault-shell-v4-public-asset-api'
 matched_cache = next((name for name in old_caches if name in worker_source), None)
 if not matched_cache:
     raise SystemExit('Expected service worker cache version was not found.')
