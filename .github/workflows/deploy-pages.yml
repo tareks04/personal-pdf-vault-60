@@ -43,6 +43,9 @@ jobs:
           python3 patch-upload-staging.py
           node --check public/modules/github.js
           python3 -m py_compile publish-staged-release.py
+          grep -q 'async uploadPair(pair)' public/modules/github.js
+          grep -q 'upload-staging/' public/modules/github.js
+          grep -q 'ready.json' public/modules/github.js
           node --input-type=module --check < public/app.js
           grep -q 'pdfjsLib.getDocument' public/app.js
           ! grep -q 'iframe class="reader-frame"' public/app.js
