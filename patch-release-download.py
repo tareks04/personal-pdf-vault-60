@@ -44,7 +44,9 @@ new = '''  async downloadAsset(asset) {
 '''
 if old not in source:
     raise SystemExit('Expected old downloadAsset method was not found in extracted site bundle.')
-module.write_text(source.replace(old, new), encoding='utf-8')
+patched_source = source.replace(old, new)
+module.write_text(patched_source, encoding='utf-8')
+source = patched_source
 
 worker = Path('public/service-worker.js')
 worker_source = worker.read_text(encoding='utf-8')
@@ -61,3 +63,19 @@ lines = source.splitlines()
 for i, line in enumerate(lines):
     if re.search(r'owner|verify|downloadAsset|release', line, re.I):
         print(f'SOURCE {i+1}: ' + line[:300])
+
+# TEMP: locate the UI handler that performs owner verification.
+import re
+for jsfile in Path('public').rglob('*.js'):
+    try:
+        js = jsfile.read_text(encoding='utf-8')
+    except Exception:
+        continue
+    rows = js.splitlines()
+    hits = [i for i, row in enumerate(rows) if re.search(r'verify owner|verifyOwner|owner account|owner token|verify.*token|token.*verify|loadControlConfig', row, re.I)]
+    if hits:
+        print('FILE:', jsfile)
+        for i in hits[:24]:
+            lo, hi = max(0, i-3), min(len(rows), i+6)
+            for j in range(lo, hi):
+                print(f'  {j+1}: {rows[j][:360]}')
