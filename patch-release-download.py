@@ -174,6 +174,62 @@ if old_reader not in app_source:
     raise SystemExit('Expected fetchEncryptedPdf function was not found.')
 app_source = app_source.replace(old_reader, new_reader, 1)
 
+# Cache the encrypted PDF itself on this device before attempting the cloud upload.
+# The PDF remains encrypted in IndexedDB; plaintext exists only during local reading.
+transformations = [
+    (
+        'const cached = await cacheSidecar({ ...localRecord, localOnly:true }, pair.sidecarBlob, null);',
+        'const cached = await cacheSidecar({ ...localRecord, localOnly:true }, pair.sidecarBlob, pair.encryptedBlob);',
+        'local encrypted PDF cache'
+    ),
+    (
+        'if (hash && state.docs.some(d=>d.descriptor.sha256 === hash)) {',
+        'if (hash && state.docs.some(d=>d.descriptor.sha256 === hash && !d.localOnly)) {',
+        'allow retry of a prior local-only PDF'
+    ),
+    (
+        '  const tags = ($("#upload-tags")?.value || "").split(",").map(s=>s.trim()).filter(Boolean);\n  let done = 0;',
+        '  const tags = ($("#upload-tags")?.value || "").split(",").map(s=>s.trim()).filter(Boolean);\n  let done = 0;\n  let uploadSuccessCount = 0;\n  let uploadFallbackCount = 0;',
+        'upload result counters'
+    ),
+    (
+        '      const localRecord = { assetId:pair.assetId, descriptor:pair.descriptor, source:"local", localOnly:true, envelope:null };',
+        '      const priorLocalOnly = hash ? state.docs.filter(d => d.localOnly && d.descriptor?.sha256 === hash) : [];\n      const localRecord = { assetId:pair.assetId, descriptor:pair.descriptor, source:"local", localOnly:true, envelope:null };',
+        'track previous local-only copy for retry'
+    ),
+    (
+        '        if (!state.token) {\n          appendEncryptedDownloads(results, pair, T("noToken"));',
+        '        if (!state.token) {\n          uploadFallbackCount++;\n          appendEncryptedDownloads(results, pair, T("noToken"));',
+        'count missing-token upload'
+    ),
+    (
+        '            upsertDoc({ ...record, ...parsed, ...cloudCache });\n            results?.insertAdjacentHTML("beforeend", `<div class="success-box">${esc(file.name)} — ${T("success")}</div>`);',
+        '            for (const stale of priorLocalOnly) {\n              await deleteCachedPair(stale.assetId).catch(() => {});\n              state.docs = state.docs.filter(d => d.assetId !== stale.assetId);\n            }\n            upsertDoc({ ...record, ...parsed, ...cloudCache });\n            uploadSuccessCount++;\n            results?.insertAdjacentHTML("beforeend", `<div class="success-box">${esc(file.name)} — ${T("success")}</div>`);',
+        'count confirmed upload and replace previous local-only copy'
+    ),
+    (
+        '          } catch (error) {\n            const partial = error.partialUpload;',
+        '          } catch (error) {\n            uploadFallbackCount++;\n            const partial = error.partialUpload;',
+        'count failed cloud upload'
+    ),
+    (
+        '    $("#nav-book-count").textContent = visibleDocs().length;\n    toast(T("completed"), "success");',
+        '    $("#nav-book-count").textContent = visibleDocs().length;\n    if (mode === "upload" && uploadFallbackCount > 0) {\n      const message = uploadSuccessCount > 0\n        ? ` ${uploadSuccessCount} PDF GitHub-এ upload হয়েছে; ${uploadFallbackCount}টি হয়নি। ব্যর্থ ফাইলগুলোর encrypted download link নিচে আছে।`\n        : `${uploadFallbackCount}টি PDF GitHub-এ upload হয়নি। নিচের দুইটি encrypted file download করে Release-এ publish করতে হবে।`;\n      toast(message, "error");\n    } else {\n      toast(T("completed"), "success");\n    }',
+        'do not show a success toast for failed uploads'
+    )
+]
+for old_text, new_text, description in transformations:
+    if old_text not in app_source:
+        raise SystemExit('Expected app.js section not found: ' + description)
+    app_source = app_source.replace(old_text, new_text, 1)
+
+# Give a clear manual Release target whenever browser upload fails.
+fallback_line = '  target.insertAdjacentHTML("beforeend", `<div class="workflow-note">${esc(note)}</div><div class="result-files"><div class="result-file"><span>${esc(pair.assetFileName)}</span><a href="${pdfUrl}" download="${esc(pair.assetFileName)}">↓ Download</a></div><div class="result-file"><span>${esc(pair.sidecarFileName)}</span><a href="${metaUrl}" download="${esc(pair.sidecarFileName)}">↓ Download</a></div></div>`);'
+fallback_new = fallback_line + '\n  target.insertAdjacentHTML("beforeend", \'<div class="warning-box">Manual publish: create/open GitHub Release with tag <strong>pdf-vault-001</strong> and upload any missing encrypted files above. Then return to the Vault and press Sync Now.</div>\');'
+if fallback_line not in app_source:
+    raise SystemExit('Expected encrypted download markup not found.')
+app_source = app_source.replace(fallback_line, fallback_new, 1)
+
 app.write_text(app_source, encoding='utf-8')
 
 # Inject the owner-only file import controls.
@@ -198,24 +254,10 @@ html.write_text(html_source, encoding='utf-8')
 worker = Path('public/service-worker.js')
 worker_source = worker.read_text(encoding='utf-8')
 old_caches = ('personal-pdf-vault-shell-v1', 'personal-pdf-vault-shell-v2-owner-lock')
-new_cache = 'personal-pdf-vault-shell-v6-remote-pdf-cache'
+new_cache = 'personal-pdf-vault-shell-v7-upload-status-cache-pdf'
 matched = next((name for name in old_caches if name in worker_source), None)
 if not matched:
     raise SystemExit('Expected original service worker cache name not found.')
 worker.write_text(worker_source.replace(matched, new_cache), encoding='utf-8')
 
 print('Applied owner-session preservation and manual encrypted configuration import.')
-
-# TEMP: diagnose why uploads did not result in PDF Release assets.
-for relfile, ranges in [
-    ('public/config.js', [(1,80)]),
-    ('public/modules/github.js', [(1,210)]),
-    ('public/app.js', [(230,340),(500,590),(570,625)])
-]:
-    p = Path(relfile)
-    if not p.exists(): continue
-    rows = p.read_text(encoding='utf-8').splitlines()
-    print('DIAG FILE:', relfile)
-    for start,end in ranges:
-        for i in range(start-1,min(end,len(rows))):
-            print(f'DIAG {i+1}: {rows[i][:650]}')
