@@ -24,11 +24,11 @@ jobs:
           mkdir -p public
           cat bundle/part{01..12} | base64 -d | tar -xJ -C public
           test -f public/index.html
-          if [ -f vault-index.json ]; then
-            cp vault-index.json public/vault-index.json
-          else
-            printf '%s\n' '{"schemaVersion":1,"config":null,"entries":[],"problems":[],"releases":[],"usageBytes":0}' > public/vault-index.json
-          fi
+      - name: Build public Vault index with GitHub Actions token
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 build-public-index.py public/vault-index.json
+
       - name: Install PDF.js canvas reader
         run: |
           mkdir -p public/vendor/pdfjs
