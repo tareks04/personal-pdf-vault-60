@@ -66,6 +66,7 @@ helper = '''async function importOwnerConfigFile() {
       throw new Error("Configuration version is missing or invalid.");
     }
     state.config = config;
+    state.manualConfigImport = true;
     localStorage.setItem("pvault-public-config", JSON.stringify(config));
     togglePanel(null);
     showMessage("বিদ্যমান Vault configuration লোড হয়েছে। Recovery Key প্রয়োজন নেই, যদি আপনার বর্তমান Master Password মনে থাকে। এখন উপরের Master Password দিয়ে Unlock করুন।", "success");
@@ -102,6 +103,17 @@ if event_marker not in app_source:
     raise SystemExit('Owner verification event binding not found.')
 if 'import-owner-config-btn' not in app_source:
     app_source = app_source.replace(event_marker, event_marker + '\n  $("#import-owner-config-btn").onclick=importOwnerConfigFile;', 1)
+
+unlock_old = '''async function unlockWithPassword(password) {
+  const config = await getLatestConfig(true);'''
+unlock_new = '''async function unlockWithPassword(password) {
+  const config = state.manualConfigImport && state.config
+    ? state.config
+    : await getLatestConfig(true);
+  state.manualConfigImport = false;'''
+if unlock_old not in app_source:
+    raise SystemExit('unlockWithPassword implementation was not found.')
+app_source = app_source.replace(unlock_old, unlock_new, 1)
 
 app.write_text(app_source, encoding='utf-8')
 
