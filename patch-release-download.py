@@ -116,6 +116,64 @@ if unlock_old not in app_source:
     raise SystemExit('unlockWithPassword implementation was not found.')
 app_source = app_source.replace(unlock_old, unlock_new, 1)
 
+old_reader = '''async function fetchEncryptedPdf(doc) {
+  const cached = await getCachedPair(doc.assetId);
+  if (cached?.pdfBlob) return cached.pdfBlob;
+  const asset = doc.pdfAsset;
+  if (!asset?.browser_download_url) throw new Error("Encrypted PDF asset is not cached on this device.");
+  const blob = await state.client.downloadAsset(asset);
+  return blob;
+}'''
+new_reader = '''async function fetchEncryptedPdf(doc) {
+  const cached = await getCachedPair(doc.assetId).catch(() => null);
+  if (cached?.pdfBlob) return cached.pdfBlob;
+
+  // A public Release asset can be fetched by its REST asset id/url even when
+  // GitHub omits browser_download_url from the in-memory object.
+  const asset = doc.pdfAsset || (
+    doc.pdfAssetId || cached?.pdfAssetId
+      ? {
+          id: doc.pdfAssetId || cached?.pdfAssetId,
+          url: doc.pdfUrl || cached?.pdfUrl || undefined,
+          browser_download_url: doc.pdfUrl || cached?.pdfUrl || undefined
+        }
+      : null
+  );
+  if (!asset || !(asset.id || asset.url || asset.browser_download_url)) {
+    throw new Error("Encrypted PDF asset reference is missing. Sync the library and try again.");
+  }
+  if (!state.client) throw new Error("GitHub connection is not initialized. Unlock the Vault again.");
+
+  const blob = await state.client.downloadAsset(asset);
+  if (!(blob instanceof Blob) || !blob.size) {
+    throw new Error("GitHub returned an empty encrypted PDF asset.");
+  }
+
+  // Keep only the encrypted bytes in IndexedDB. Decryption still happens locally
+  // immediately after this function returns.
+  const cacheRecord = cached || {
+    assetId: doc.assetId,
+    vaultId: state.config?.vaultId,
+    metaBlob: null,
+    pdfAssetId: asset.id || null,
+    metaAssetId: doc.metaAsset?.id || doc.metaAssetId || null,
+    pdfUrl: asset.browser_download_url || asset.url || null,
+    metaUrl: doc.metaAsset?.browser_download_url || null
+  };
+  await saveCachedPair({
+    ...cacheRecord,
+    pdfBlob: blob,
+    offlineAvailable: true,
+    updatedAt: new Date().toISOString()
+  });
+  doc.pdfBlob = blob;
+  doc.offlineAvailable = true;
+  return blob;
+}'''
+if old_reader not in app_source:
+    raise SystemExit('Expected fetchEncryptedPdf function was not found.')
+app_source = app_source.replace(old_reader, new_reader, 1)
+
 app.write_text(app_source, encoding='utf-8')
 
 # Inject the owner-only file import controls.
@@ -140,40 +198,10 @@ html.write_text(html_source, encoding='utf-8')
 worker = Path('public/service-worker.js')
 worker_source = worker.read_text(encoding='utf-8')
 old_caches = ('personal-pdf-vault-shell-v1', 'personal-pdf-vault-shell-v2-owner-lock')
-new_cache = 'personal-pdf-vault-shell-v5-owner-config-import'
+new_cache = 'personal-pdf-vault-shell-v6-remote-pdf-cache'
 matched = next((name for name in old_caches if name in worker_source), None)
 if not matched:
     raise SystemExit('Expected original service worker cache name not found.')
 worker.write_text(worker_source.replace(matched, new_cache), encoding='utf-8')
 
 print('Applied owner-session preservation and manual encrypted configuration import.')
-
-# TEMP: inspect base64url/recovery decoding implementation.
-for jsfile in Path('public').rglob('*.js'):
-    try:
-        rows = jsfile.read_text(encoding='utf-8').splitlines()
-    except Exception:
-        continue
-    hits = [i for i,row in enumerate(rows) if re.search(r'atob|unb64u|recoverVault|recoveryKey|function b64u|function unb64u', row, re.I)]
-    if hits:
-        print('BASE64 FILE:', jsfile)
-        for i in hits:
-            for j in range(max(0,i-3), min(len(rows),i+7)):
-                print(f'B64 {j+1}: {rows[j][:500]}')
-
-# TEMP: inspect the reader, local cache and asset-download paths.
-for jsfile in Path('public').rglob('*.js'):
-    try:
-        rows = jsfile.read_text(encoding='utf-8').splitlines()
-    except Exception:
-        continue
-    candidates = [i for i,row in enumerate(rows) if re.search(r'not cached|cached on this device|getCachedPair|saveCachedPair|decryptPdfBlob|data-action.*read|openDocument|readDocument|async function.*read|browser_download_url|downloadAsset|fetchAsset|asset.*blob|cache.*asset', row, re.I)]
-    if candidates:
-        print('READFLOW FILE:', jsfile)
-        shown = set()
-        for i in candidates[:80]:
-            lo, hi = max(0, i-4), min(len(rows), i+9)
-            if any(j in shown for j in range(lo,hi)): continue
-            for j in range(lo,hi):
-                shown.add(j)
-                print(f'READFLOW {j+1}: {rows[j][:500]}')
