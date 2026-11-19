@@ -253,18 +253,211 @@ if reader_handlers not in app_source:
     raise SystemExit('Expected Reader Download/Print click handlers not found.')
 app_source = app_source.replace(reader_handlers, '', 1)
 
-# Temporary deployment diagnostics: expose the actual reader implementation
-# in GitHub Actions logs so the custom PDF.js renderer can be patched safely.
-for needle in ("reader-frame", "reader-modal", "reader-title", "openReader", "showReader"):
-    positions = [m.start() for m in re.finditer(re.escape(needle), app_source, re.I)]
-    for pos in positions[:4]:
-        print("\\n--- APP READER DIAGNOSTIC: " + needle + " @ " + str(pos) + " ---")
-        print(app_source[max(0, pos - 1400):min(len(app_source), pos + 2600)])
-print("\\n--- HTML READER DIAGNOSTIC ---")
-for needle in ("reader-frame", "reader-modal"):
-    pos = html_source.find(needle) if "html_source" in globals() else -1
-    if pos >= 0:
-        print(html_source[max(0, pos - 1200):min(len(html_source), pos + 2400)])
+# Replace the native browser PDF iframe with a PDF.js canvas reader.
+reader_pattern = r'async function openReader\(assetId\) \{.*?\n\}\nfunction closeReader\(\) \{.*?\n\}'
+reader_code = r'''async function loadPdfJsLibrary() {
+  if (window.pdfjsLib) return window.pdfjsLib;
+  if (!window.__pvaultPdfJsLoading) {
+    window.__pvaultPdfJsLoading = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = new URL("vendor/pdfjs/pdf.min.js", document.baseURI).href;
+      script.async = true;
+      script.onload = () => window.pdfjsLib ? resolve(window.pdfjsLib) : reject(new Error("PDF.js did not initialize."));
+      script.onerror = () => reject(new Error("Could not load the built-in PDF reading engine. Refresh the page and try again."));
+      document.head.append(script);
+    });
+  }
+  const lib = await window.__pvaultPdfJsLoading;
+  lib.GlobalWorkerOptions.workerSrc = new URL("vendor/pdfjs/pdf.worker.min.js", document.baseURI).href;
+  return lib;
+}
+
+async function openReader(assetId) {
+  const doc = state.docs.find(d => d.assetId === assetId);
+  if (!doc) return;
+  toast(String(T("working")) + ": " + String(T("read")));
+  try {
+    const encryptedBlob = await fetchEncryptedPdf(doc);
+    const pdfBlob = await decryptPdfBlob(encryptedBlob, doc.descriptor, state.masterKey, () => {});
+    const pdfjsLib = await loadPdfJsLibrary();
+
+    const title = doc.descriptor.title || doc.descriptor.originalFilename || "PDF";
+    const modal = document.createElement("div");
+    modal.className = "modal-backdrop";
+    modal.id = "reader-modal";
+    modal.innerHTML =
+      '<div class="modal pdfjs-reader-modal" style="width:min(96vw,1160px);max-width:none;height:min(94vh,1000px);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;padding:0">' +
+        '<div class="modal-head" style="flex:0 0 auto;padding:12px 16px">' +
+          '<div><strong>' + esc(title) + '</strong><div class="sub-note">Read-only PDF reader</div></div>' +
+          '<div class="reader-actions"><button id="reader-close" class="modal-close" type="button" aria-label="Close reader">×</button></div>' +
+        '</div>' +
+        '<div class="pdfjs-toolbar" style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;padding:9px 12px;border-bottom:1px solid rgba(128,128,128,.28)">' +
+          '<button id="reader-prev" class="secondary-btn" type="button">‹ Previous</button>' +
+          '<span id="reader-page-indicator" style="min-width:105px;text-align:center;font-variant-numeric:tabular-nums">Loading…</span>' +
+          '<button id="reader-next" class="secondary-btn" type="button">Next ›</button>' +
+          '<span aria-hidden="true" style="width:10px"></span>' +
+          '<button id="reader-zoom-out" class="secondary-btn" type="button" aria-label="Zoom out">−</button>' +
+          '<span id="reader-zoom-label" style="min-width:48px;text-align:center">100%</span>' +
+          '<button id="reader-zoom-in" class="secondary-btn" type="button" aria-label="Zoom in">+</button>' +
+        '</div>' +
+        '<div id="reader-pages" style="flex:1 1 auto;min-height:0;overflow:auto;display:flex;justify-content:center;align-items:flex-start;padding:18px;background:#3b3b3b">' +
+          '<div id="reader-loading" style="color:#fff;padding:28px;text-align:center">Rendering PDF…</div>' +
+          '<canvas id="reader-canvas" style="display:none;max-width:none;height:auto;background:#fff;box-shadow:0 2px 18px rgba(0,0,0,.38)"></canvas>' +
+        '</div>' +
+      '</div>';
+
+    $("#modal-root").append(modal);
+    $("#reader-close").addEventListener("click", closeReader);
+    modal.addEventListener("click", event => {
+      if (event.target === modal) closeReader();
+    });
+
+    const bytes = new Uint8Array(await pdfBlob.arrayBuffer());
+    const loadingTask = pdfjsLib.getDocument({
+      data: bytes,
+      isEvalSupported: false,
+      useSystemFonts: true
+    });
+    state.activePdfJsTask = loadingTask;
+    const pdfDocument = await loadingTask.promise;
+    if (!modal.isConnected) {
+      try { await loadingTask.destroy(); } catch (_) {}
+      return;
+    }
+    state.activeReaderPdfDoc = pdfDocument;
+
+    const canvas = $("#reader-canvas");
+    const container = $("#reader-pages");
+    const loadingLabel = $("#reader-loading");
+    const pageIndicator = $("#reader-page-indicator");
+    const zoomLabel = $("#reader-zoom-label");
+    const previousButton = $("#reader-prev");
+    const nextButton = $("#reader-next");
+    let pageNumber = 1;
+    let zoom = 1;
+    let renderTask = null;
+    let renderSequence = 0;
+
+    async function renderCurrentPage() {
+      const sequence = ++renderSequence;
+      if (renderTask) {
+        try { renderTask.cancel(); } catch (_) {}
+        try { await renderTask.promise; } catch (_) {}
+        renderTask = null;
+      }
+      if (!modal.isConnected || sequence !== renderSequence) return;
+
+      const page = await pdfDocument.getPage(pageNumber);
+      if (!modal.isConnected || sequence !== renderSequence) return;
+
+      const naturalViewport = page.getViewport({ scale: 1 });
+      const availableWidth = Math.max(260, container.clientWidth - 44);
+      const availableHeight = Math.max(280, container.clientHeight - 44);
+      const fitScale = Math.min(
+        availableWidth / naturalViewport.width,
+        availableHeight / naturalViewport.height
+      );
+      const scale = Math.max(0.25, Math.min(4, fitScale * zoom));
+      const viewport = page.getViewport({ scale });
+      const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(viewport.width * outputScale);
+      canvas.height = Math.floor(viewport.height * outputScale);
+      canvas.style.width = Math.floor(viewport.width) + "px";
+      canvas.style.height = Math.floor(viewport.height) + "px";
+
+      const context = canvas.getContext("2d", { alpha: false });
+      context.setTransform(outputScale, 0, 0, outputScale, 0, 0);
+      renderTask = page.render({ canvasContext: context, viewport });
+      state.activeReaderRenderTask = renderTask;
+      try {
+        await renderTask.promise;
+      } catch (error) {
+        if (!error || error.name !== "RenderingCancelledException") throw error;
+      }
+      if (!modal.isConnected || sequence !== renderSequence) return;
+
+      loadingLabel.style.display = "none";
+      canvas.style.display = "block";
+      pageIndicator.textContent = "Page " + pageNumber + " of " + pdfDocument.numPages;
+      zoomLabel.textContent = Math.round(zoom * 100) + "%";
+      previousButton.disabled = pageNumber <= 1;
+      nextButton.disabled = pageNumber >= pdfDocument.numPages;
+    }
+
+    previousButton.addEventListener("click", () => {
+      if (pageNumber > 1) {
+        pageNumber--;
+        renderCurrentPage().catch(error => toast(error.message || "Could not render this PDF page.", "error"));
+      }
+    });
+    nextButton.addEventListener("click", () => {
+      if (pageNumber < pdfDocument.numPages) {
+        pageNumber++;
+        renderCurrentPage().catch(error => toast(error.message || "Could not render this PDF page.", "error"));
+      }
+    });
+    $("#reader-zoom-out").addEventListener("click", () => {
+      zoom = Math.max(0.5, Math.round((zoom - 0.2) * 100) / 100);
+      renderCurrentPage().catch(error => toast(error.message || "Could not zoom this PDF page.", "error"));
+    });
+    $("#reader-zoom-in").addEventListener("click", () => {
+      zoom = Math.min(3, Math.round((zoom + 0.2) * 100) / 100);
+      renderCurrentPage().catch(error => toast(error.message || "Could not zoom this PDF page.", "error"));
+    });
+
+    const resizeHandler = () => {
+      if (state.readerResizeFrame) cancelAnimationFrame(state.readerResizeFrame);
+      state.readerResizeFrame = requestAnimationFrame(() => {
+        state.readerResizeFrame = null;
+        if (modal.isConnected) {
+          renderCurrentPage().catch(error => toast(error.message || "Could not resize this PDF page.", "error"));
+        }
+      });
+    };
+    state.activeReaderResizeHandler = resizeHandler;
+    window.addEventListener("resize", resizeHandler);
+
+    await renderCurrentPage();
+    const recent = [assetId, ...state.prefs.recent.filter(id => id !== assetId)].slice(0, 30);
+    state.prefs.recent = recent;
+    await persistPrefs();
+  } catch (error) {
+    closeReader();
+    toast(error.message || "PDF could not be opened.", "error");
+  }
+}
+
+function closeReader() {
+  const renderTask = state.activeReaderRenderTask;
+  state.activeReaderRenderTask = null;
+  if (renderTask) {
+    try { renderTask.cancel(); } catch (_) {}
+  }
+  const resizeHandler = state.activeReaderResizeHandler;
+  state.activeReaderResizeHandler = null;
+  if (resizeHandler) window.removeEventListener("resize", resizeHandler);
+  if (state.readerResizeFrame) {
+    cancelAnimationFrame(state.readerResizeFrame);
+    state.readerResizeFrame = null;
+  }
+  const loadingTask = state.activePdfJsTask;
+  state.activePdfJsTask = null;
+  if (loadingTask && loadingTask.destroy) {
+    try { loadingTask.destroy(); } catch (_) {}
+  }
+  const pdfDocument = state.activeReaderPdfDoc;
+  state.activeReaderPdfDoc = null;
+  if (pdfDocument && pdfDocument.destroy) {
+    try { pdfDocument.destroy(); } catch (_) {}
+  }
+  $("#reader-modal")?.remove();
+  if (state.activeReaderUrl) URL.revokeObjectURL(state.activeReaderUrl);
+  state.activeReaderUrl = null;
+}
+'''
+app_source, reader_count = re.subn(reader_pattern, lambda match: reader_code, app_source, count=1, flags=re.S)
+if reader_count != 1:
+    raise SystemExit(f'Expected one native PDF reader block; found {reader_count}.')
 
 app.write_text(app_source, encoding='utf-8')
 
@@ -504,7 +697,7 @@ if 'id="pvault-readonly-guard"' not in index_source:
 worker = Path('public/service-worker.js')
 worker_source = worker.read_text(encoding='utf-8')
 old_caches = ('personal-pdf-vault-shell-v1', 'personal-pdf-vault-shell-v2-owner-lock')
-new_cache = 'personal-pdf-vault-shell-v10-reader-download-print-removed'
+new_cache = 'personal-pdf-vault-shell-v11-pdfjs-canvas-reader'
 matched = next((name for name in old_caches if name in worker_source), None)
 if not matched:
     raise SystemExit('Expected original service worker cache name not found.')
