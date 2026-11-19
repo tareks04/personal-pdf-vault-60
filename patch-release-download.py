@@ -218,7 +218,7 @@ transformations = [
         'track previous local-only copy for retry'
     ),
     (
-        '        if (!state.token) {\n          appendEncryptedDownloads(results, pair, T("noToken"));',
+        '        if (!state.token) {\n          uploadFallbackCount++;\n          results?.insertAdjacentHTML("beforeend", "<div class=\"warning-box\">Owner Token এই browser tab-এ verify করা নেই। Owner Access Token দিয়ে আবার Verify করুন, তারপর PDF upload retry করুন।</div>");\n          appendEncryptedDownloads(results, pair, T("noToken"));',
         '        if (!state.token) {\n          uploadFallbackCount++;\n          appendEncryptedDownloads(results, pair, T("noToken"));',
         'count missing-token upload'
     ),
@@ -751,7 +751,7 @@ if 'id="pvault-readonly-guard"' not in index_source:
 worker = Path('public/service-worker.js')
 worker_source = worker.read_text(encoding='utf-8')
 old_caches = ('personal-pdf-vault-shell-v1', 'personal-pdf-vault-shell-v2-owner-lock')
-new_cache = 'personal-pdf-vault-shell-v13-staged-upload-diagnostics'
+new_cache = 'personal-pdf-vault-shell-v14-owner-token-diagnostic'
 matched = next((name for name in old_caches if name in worker_source), None)
 if not matched:
     raise SystemExit('Expected original service worker cache name not found.')
