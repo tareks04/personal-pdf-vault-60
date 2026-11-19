@@ -250,11 +250,212 @@ if 'id="owner-config-import"' not in html_source:
     html_source = html_source.replace(button, button + import_panel, 1)
 html.write_text(html_source, encoding='utf-8')
 
+# Best-effort reader-only mode: hide in-reader export controls and suppress
+# common save/print/share/copy actions while a PDF is open. This is a
+# deterrent only; browser-side viewing cannot provide DRM or stop screenshots.
+readonly_markup = r"""<style id="pvault-readonly-style">
+.pvault-readonly-root {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+.pvault-readonly-root a[download],
+.pvault-readonly-root #download,
+.pvault-readonly-root #print,
+.pvault-readonly-root #secondaryDownload,
+.pvault-readonly-root #secondaryPrint,
+.pvault-readonly-root .download,
+.pvault-readonly-root .print,
+.pvault-readonly-root .share,
+.pvault-readonly-root [data-l10n-id="download"],
+.pvault-readonly-root [data-l10n-id="print"] {
+  display: none !important;
+}
+@media print {
+  body.pvault-reader-print-block * { display: none !important; }
+}
+</style>
+<script id="pvault-readonly-guard">
+(() => {
+  if (window.__pvaultReadonlyGuardInstalled) return;
+  window.__pvaultReadonlyGuardInstalled = true;
+  const roots = [];
+  const originalPrint = window.print ? window.print.bind(window) : null;
+  const actionPattern = /(download|print|share|save|export)/i;
+
+  function visible(el) {
+    if (!el || !el.isConnected) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  }
+
+  function getRoot(node) {
+    if (!node || !node.closest) return null;
+    return node.closest(".pvault-readonly-root");
+  }
+
+  function markRoot(node) {
+    if (!node || !node.isConnected) return;
+    let root = node.closest(
+      'dialog,[role="dialog"],.modal,.reader,.pdf-reader,.pdf-viewer,' +
+      '[class*="reader"],[id*="reader"],[class*="pdf-viewer"],[id*="pdf-viewer"]'
+    );
+    if (!root) root = node.parentElement || node;
+    if (!(root instanceof Element)) return;
+    if (!root.classList.contains("pvault-readonly-root")) {
+      root.classList.add("pvault-readonly-root");
+      roots.push(root);
+    }
+
+    if (node instanceof HTMLIFrameElement) {
+      const src = node.getAttribute("src") || "";
+      if (/^(blob:|data:application\/pdf)/i.test(src) && !/toolbar=0/i.test(src)) {
+        node.setAttribute("src", src + (src.includes("#") ? "&" : "#") + "toolbar=0&navpanes=0&statusbar=0");
+      }
+    }
+
+    root.querySelectorAll('a,button,[role="button"],input[type="button"],input[type="submit"]').forEach(el => {
+      const label = [
+        el.innerText || "",
+        el.textContent || "",
+        el.getAttribute("aria-label") || "",
+        el.getAttribute("title") || "",
+        el.getAttribute("data-action") || "",
+        el.id || "",
+        typeof el.className === "string" ? el.className : "",
+        el.hasAttribute("download") ? "download" : ""
+      ].join(" ");
+      if (actionPattern.test(label)) {
+        el.setAttribute("aria-hidden", "true");
+        el.setAttribute("tabindex", "-1");
+        el.style.setProperty("display", "none", "important");
+      }
+    });
+  }
+
+  function scan() {
+    document.querySelectorAll(
+      'iframe,object,embed,.pdfViewer,#viewerContainer,' +
+      '[class*="pdf-viewer"],[id*="pdf-viewer"],[class*="pdf-reader"],[id*="pdf-reader"]'
+    ).forEach(node => {
+      const src = [
+        node.getAttribute("src") || "",
+        node.getAttribute("data") || "",
+        node.getAttribute("type") || "",
+        node.id || "",
+        typeof node.className === "string" ? node.className : ""
+      ].join(" ").toLowerCase();
+      const pdfNode =
+        /application\/pdf|\.pdf(?:[?#]|$)|^blob:/.test(src) ||
+        /pdfviewer|pdf-viewer|pdf-reader/.test(src);
+      if (pdfNode && visible(node)) markRoot(node);
+    });
+
+    document.querySelectorAll(".pvault-readonly-root").forEach(root => {
+      if (root.isConnected) {
+        root.querySelectorAll('a,button,[role="button"],input[type="button"],input[type="submit"]').forEach(el => {
+          const label = [
+            el.innerText || "", el.textContent || "",
+            el.getAttribute("aria-label") || "", el.getAttribute("title") || "",
+            el.getAttribute("data-action") || "", el.id || "",
+            typeof el.className === "string" ? el.className : "",
+            el.hasAttribute("download") ? "download" : ""
+          ].join(" ");
+          if (actionPattern.test(label)) el.style.setProperty("display", "none", "important");
+        });
+      }
+    });
+
+    while (roots.length && !roots[0].isConnected) roots.shift();
+    document.body.classList.toggle("pvault-reader-print-block", roots.some(r => r.isConnected));
+    if (window.print && roots.some(r => r.isConnected)) {
+      window.print = function () {
+        window.dispatchEvent(new CustomEvent("pvault:print-blocked"));
+      };
+    } else if (originalPrint) {
+      window.print = originalPrint;
+    }
+  }
+
+  function blockedTarget(target) {
+    const root = getRoot(target instanceof Element ? target : target && target.parentElement);
+    return root;
+  }
+
+  document.addEventListener("contextmenu", event => {
+    if (blockedTarget(event.target)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+
+  document.addEventListener("dragstart", event => {
+    if (blockedTarget(event.target)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+
+  ["copy", "cut"].forEach(type => {
+    document.addEventListener(type, event => {
+      if (blockedTarget(event.target)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
+    }, true);
+  });
+
+  document.addEventListener("keydown", event => {
+    const root = blockedTarget(event.target);
+    if (!root) return;
+    const key = String(event.key || "").toLowerCase();
+    const mod = event.ctrlKey || event.metaKey;
+    if (mod && ["s", "p", "c", "x"].includes(key)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+
+  document.addEventListener("click", event => {
+    const root = blockedTarget(event.target);
+    if (!root) return;
+    const el = event.target instanceof Element
+      ? event.target.closest('a,button,[role="button"]')
+      : null;
+    if (!el) return;
+    const label = [
+      el.innerText || "", el.textContent || "",
+      el.getAttribute("aria-label") || "", el.getAttribute("title") || "",
+      el.getAttribute("data-action") || "", el.id || "",
+      el.hasAttribute("download") ? "download" : ""
+    ].join(" ");
+    if (actionPattern.test(label)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true);
+
+  const observer = new MutationObserver(scan);
+  observer.observe(document.documentElement, {
+    childList: true, subtree: true, attributes: true,
+    attributeFilter: ["src", "data", "class", "id", "download", "aria-label", "title"]
+  });
+  scan();
+})();
+</script>
+"""
+index_path = Path('public/index.html')
+index_source = index_path.read_text(encoding='utf-8')
+if 'id="pvault-readonly-guard"' not in index_source:
+    if '</body>' not in index_source:
+        raise SystemExit('Could not find </body> in index.html for reader protection.')
+    index_source = index_source.replace('</body>', readonly_markup + '\n</body>', 1)
+    index_path.write_text(index_source, encoding='utf-8')
+
 # Invalidate the previously cached shell.
 worker = Path('public/service-worker.js')
 worker_source = worker.read_text(encoding='utf-8')
 old_caches = ('personal-pdf-vault-shell-v1', 'personal-pdf-vault-shell-v2-owner-lock')
-new_cache = 'personal-pdf-vault-shell-v7-upload-status-cache-pdf'
+new_cache = 'personal-pdf-vault-shell-v8-reader-view-only'
 matched = next((name for name in old_caches if name in worker_source), None)
 if not matched:
     raise SystemExit('Expected original service worker cache name not found.')
