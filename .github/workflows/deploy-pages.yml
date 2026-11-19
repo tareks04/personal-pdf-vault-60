@@ -24,6 +24,14 @@ jobs:
           mkdir -p public
           cat bundle/part{01..12} | base64 -d | tar -xJ -C public
           test -f public/index.html
+      - name: Install PDF.js canvas reader
+        run: |
+          mkdir -p public/vendor/pdfjs
+          curl -fsSL --retry 3 https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js -o public/vendor/pdfjs/pdf.min.js
+          curl -fsSL --retry 3 https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js -o public/vendor/pdfjs/pdf.worker.min.js
+          curl -fsSL --retry 3 https://raw.githubusercontent.com/mozilla/pdf.js/v3.11.174/LICENSE -o public/vendor/pdfjs/LICENSE
+          test -s public/vendor/pdfjs/pdf.min.js
+          test -s public/vendor/pdfjs/pdf.worker.min.js
       - name: Fix public Release asset downloads
         run: python3 patch-release-download.py
       - name: Configure Pages
