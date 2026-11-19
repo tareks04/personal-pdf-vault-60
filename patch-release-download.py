@@ -262,6 +262,12 @@ transformations[7] = (old, new.replace(
     'toast(message + (uploadErrors.length ? " কারণ: " + uploadErrors.join(" | ") : ""), "error");'
 ), label)
 
+transformations.append((
+    '      upsertDoc({ ...localRecord, ...parsed, envelope:parsed.envelope, descriptor:parsed.descriptor, ...cached });\n      if (mode === "upload") {',
+    '      upsertDoc({ ...localRecord, ...parsed, envelope:parsed.envelope, descriptor:parsed.descriptor, ...cached });\n      if (mode === "prepare") {\n        appendEncryptedDownloads(results, pair, "Encrypted PDF and metadata are ready. Download both files and add them to Release pdf-vault-001.");\n      }\n      if (mode === "upload") {',
+    'make encrypted pair downloadable in Prepare mode'
+))
+
 for old_text, new_text, description in transformations:
     if old_text not in app_source:
         raise SystemExit('Expected app.js section not found: ' + description)
