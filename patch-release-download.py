@@ -44,17 +44,18 @@ if old_download not in source:
     raise SystemExit('Expected original downloadAsset function not found.')
 module.write_text(source.replace(old_download, new_download), encoding='utf-8')
 
-# Temporary diagnostics for login and release API usage.
-for term in ("fetchLatestConfig", "listReleases", "getRelease", "syncFromGithub", "fetchReleases", "getReleaseByTag"):
-    for pos in [m.start() for m in re.finditer(re.escape(term), source, re.I)][:3]:
-        print("\\n--- GITHUB API DIAG " + term + " ---")
-        print(source[max(0,pos-1000):min(len(source),pos+2600)])
-
-
 # Add a manual import route for the tiny encrypted control JSON file. This
 # does not initialize a new vault or alter the published Release.
 app = Path('public/app.js')
 app_source = app.read_text(encoding='utf-8')
+
+print("\\n--- DISCOVER ENCRYPTED ASSETS FULL ---")
+pos = source.find("async discoverEncryptedAssets()")
+print(source[pos:pos+7000] if pos >= 0 else "missing")
+print("\\n--- FETCH LATEST CONFIG FULL ---")
+pos = source.find("async fetchLatestConfig()")
+print(source[pos:pos+2800] if pos >= 0 else "missing")
+
 
 for term in ("syncFromGithub", "getLatestConfig", "unlockWithPassword", "verifyLockOwnerAction"):
     for pos in [m.start() for m in re.finditer(re.escape(term), app_source, re.I)][:2]:
@@ -92,6 +93,14 @@ helper = '''async function importOwnerConfigFile() {
 '''
 if verify_marker not in app_source:
     raise SystemExit('Owner verification handler not found in app.js.')
+
+print("\\n--- SYNC FROM GITHUB FULL ---")
+pos = app_source.find("async function syncFromGithub(")
+print(app_source[pos:pos+7500] if pos >= 0 else "missing")
+print("\\n--- OWNER VERIFY HANDLER FULL ---")
+pos = app_source.find("async function verifyLockOwnerAction(")
+print(app_source[pos:pos+4500] if pos >= 0 else "missing")
+
 if 'async function importOwnerConfigFile()' not in app_source:
     app_source = app_source.replace(verify_marker, helper + verify_marker, 1)
 
