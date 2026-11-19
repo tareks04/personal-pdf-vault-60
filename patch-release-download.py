@@ -710,4 +710,18 @@ if not matched:
     raise SystemExit('Expected original service worker cache name not found.')
 worker.write_text(worker_source.replace(matched, new_cache), encoding='utf-8')
 
+
+# Temporary uploader diagnostics: inspect the current upload form and metadata flow.
+for source_name, source_text, terms in [
+    ("INDEX", index_source if "index_source" in globals() else html_source,
+     ("upload-title", "upload-description", "upload-category", "upload-tags", "Title", "Description", "Category", "Collection")),
+    ("APP", app_source,
+     ("processSelectedFiles", "upload-title", "upload-description", "upload-category", "upload-tags", "descriptor.title", "descriptor.category"))
+]:
+    for term in terms:
+        pos = source_text.find(term)
+        if pos >= 0:
+            print("\\n--- UPLOADER " + source_name + " " + term + " ---")
+            print(source_text[max(0, pos-1000):min(len(source_text), pos+2400)])
+
 print('Applied owner-session preservation and manual encrypted configuration import.')
