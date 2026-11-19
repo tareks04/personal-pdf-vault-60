@@ -79,3 +79,10 @@ for jsfile in Path('public').rglob('*.js'):
             lo, hi = max(0, i-3), min(len(rows), i+6)
             for j in range(lo, hi):
                 print(f'  {j+1}: {rows[j][:360]}')
+
+# TEMP: show owner verification flow around fetchLatestConfig in source.
+app_lines = Path('public/app.js').read_text(encoding='utf-8').splitlines()
+for start, end in [(715, 750), (875, 890)]:
+    print(f'APP CONTEXT {start}-{end}')
+    for i in range(start-1, min(end, len(app_lines))):
+        print(f'APP {i+1}: {app_lines[i][:500]}')
