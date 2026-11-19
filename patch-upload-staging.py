@@ -33,6 +33,7 @@ new = r'''  async uploadPair(pair) {
     const dir = "upload-staging/" + assetId;
     let created = false;
     let ready = false;
+    let uploadStep = "reading the repository main branch";
 
     const encodeBlob = async blob => {
       const bytes = new Uint8Array(await blob.arrayBuffer());
@@ -49,6 +50,7 @@ new = r'''  async uploadPair(pair) {
     try {
       const mainRef = await this.request(repoPath + "/git/ref/heads/main");
       if (!mainRef?.object?.sha) throw new Error("Could not read the main branch commit.");
+      uploadStep = "creating the encrypted staging branch";
       await this.request(repoPath + "/git/refs", {
         method:"POST",
         headers:{"Content-Type":"application/json"},
@@ -56,8 +58,12 @@ new = r'''  async uploadPair(pair) {
       });
       created = true;
 
+      uploadStep = "staging the encrypted PDF file";
       await put(pair.assetFileName, await encodeBlob(pair.encryptedBlob));
+      uploadStep = "staging the encrypted metadata file";
       await put(pair.sidecarFileName, await encodeBlob(pair.sidecarBlob));
+
+      uploadStep = "staging the encrypted upload manifest";
 
       const manifest = {assetId,releaseTag:release.tag_name,pdf:pair.assetFileName,meta:pair.sidecarFileName};
       const manifestBytes = new TextEncoder().encode(JSON.stringify(manifest));
@@ -78,7 +84,13 @@ new = r'''  async uploadPair(pair) {
       if (created && !ready) {
         try { await this.request(repoPath + "/git/refs/heads/" + branch,{method:"DELETE"}); } catch (_) {}
       }
-      throw error;
+      const detail = String(error?.message || error || "Unknown GitHub API error");
+      if (/resource not accessible by personal access token|resource not accessible|http 403|status 403/i.test(detail) || Number(error?.status) === 403) {
+        throw new Error(
+          "GitHub permission denied while " + uploadStep + ". Your Fine-grained Personal Access Token must include this repository (tareks04/personal-pdf-vault-60) and Repository permissions → Contents → Read and write. Create or edit the token in GitHub Settings → Developer settings → Fine-grained tokens, then return to the Vault and verify Owner Access again. Do not paste the token into chat."
+        );
+      }
+      throw new Error("GitHub staging failed while " + uploadStep + ": " + detail);
     }
   }'''
 
