@@ -205,3 +205,17 @@ if not matched:
 worker.write_text(worker_source.replace(matched, new_cache), encoding='utf-8')
 
 print('Applied owner-session preservation and manual encrypted configuration import.')
+
+# TEMP: diagnose why uploads did not result in PDF Release assets.
+for relfile, ranges in [
+    ('public/config.js', [(1,80)]),
+    ('public/modules/github.js', [(1,210)]),
+    ('public/app.js', [(230,340),(500,590),(570,625)])
+]:
+    p = Path(relfile)
+    if not p.exists(): continue
+    rows = p.read_text(encoding='utf-8').splitlines()
+    print('DIAG FILE:', relfile)
+    for start,end in ranges:
+        for i in range(start-1,min(end,len(rows))):
+            print(f'DIAG {i+1}: {rows[i][:650]}')
