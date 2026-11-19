@@ -229,7 +229,7 @@ transformations = [
     ),
     (
         '          } catch (error) {\n            const partial = error.partialUpload;',
-        '          } catch (error) {\n            uploadFallbackCount++;\n            const partial = error.partialUpload;',
+        '          } catch (error) {\n            uploadFallbackCount++;\n            results?.insertAdjacentHTML("beforeend", `<div class="warning-box">Upload error: ${esc(error?.message || "Unknown error")}</div>`);\n            const partial = error.partialUpload;',
         'count failed cloud upload'
     ),
     (
@@ -751,7 +751,7 @@ if 'id="pvault-readonly-guard"' not in index_source:
 worker = Path('public/service-worker.js')
 worker_source = worker.read_text(encoding='utf-8')
 old_caches = ('personal-pdf-vault-shell-v1', 'personal-pdf-vault-shell-v2-owner-lock')
-new_cache = 'personal-pdf-vault-shell-v12-static-index-authenticated-build'
+new_cache = 'personal-pdf-vault-shell-v13-staged-upload-diagnostics'
 matched = next((name for name in old_caches if name in worker_source), None)
 if not matched:
     raise SystemExit('Expected original service worker cache name not found.')
