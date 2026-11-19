@@ -146,3 +146,16 @@ if not matched:
 worker.write_text(worker_source.replace(matched, new_cache), encoding='utf-8')
 
 print('Applied owner-session preservation and manual encrypted configuration import.')
+
+# TEMP: inspect base64url/recovery decoding implementation.
+for jsfile in Path('public').rglob('*.js'):
+    try:
+        rows = jsfile.read_text(encoding='utf-8').splitlines()
+    except Exception:
+        continue
+    hits = [i for i,row in enumerate(rows) if re.search(r'atob|unb64u|recoverVault|recoveryKey|function b64u|function unb64u', row, re.I)]
+    if hits:
+        print('BASE64 FILE:', jsfile)
+        for i in hits:
+            for j in range(max(0,i-3), min(len(rows),i+7)):
+                print(f'B64 {j+1}: {rows[j][:500]}')
