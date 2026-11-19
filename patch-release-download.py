@@ -459,6 +459,25 @@ app_source, reader_count = re.subn(reader_pattern, lambda match: reader_code, ap
 if reader_count != 1:
     raise SystemExit(f'Expected one native PDF reader block; found {reader_count}.')
 
+# Replace manual upload metadata with the fixed Subject / Chapter workflow.
+upload_fields_old = "    <label class=\"field-label\" for=\"upload-title\">${T(\"titleLabel\")}</label><input id=\"upload-title\" placeholder=\"\">\n    <label class=\"field-label\" for=\"upload-description\">${T(\"descriptionLabel\")}</label><textarea id=\"upload-description\" rows=\"2\"></textarea>\n    <label class=\"field-label\" for=\"upload-category\">${T(\"categoryLabel\")}</label><select id=\"upload-category\">${categoryOptions(\"Chemistry\")}</select>\n    <label class=\"field-label\" for=\"upload-custom-category\">${T(\"customCategoryLabel\")}</label><input id=\"upload-custom-category\" maxlength=\"80\" placeholder=\"${esc(T(\"customCategoryPlaceholder\"))}\">\n    <label class=\"field-label\" for=\"upload-collection\">${T(\"collectionLabel\")}</label><input id=\"upload-collection\" maxlength=\"100\" placeholder=\"${esc(T(\"collectionPlaceholder\"))}\">\n    <label class=\"field-label\" for=\"upload-tags\">${T(\"tagsLabel\")}</label><input id=\"upload-tags\" placeholder=\"HSC, Medical, Notes\">"
+upload_fields_new = "    <label class=\"field-label\" for=\"upload-subject\">Subject</label>\n    <select id=\"upload-subject\">\n      <option value=\"Botany\">Botany</option>\n      <option value=\"Zoology\">Zoology</option>\n      <option value=\"Chemistry 1st Paper\">Chemistry 1st Paper</option>\n      <option value=\"Chemistry 2nd Paper\">Chemistry 2nd Paper</option>\n      <option value=\"Physics 1st Paper\">Physics 1st Paper</option>\n      <option value=\"Physics 2nd Paper\">Physics 2nd Paper</option>\n    </select>\n    <label class=\"field-label\" for=\"upload-chapter\">Chapter</label>\n    <select id=\"upload-chapter\">\n      <option value=\"Chapter 1\">Chapter 1</option>\n      <option value=\"Chapter 2\">Chapter 2</option>\n      <option value=\"Chapter 3\">Chapter 3</option>\n      <option value=\"Chapter 4\">Chapter 4</option>\n      <option value=\"Chapter 5\">Chapter 5</option>\n      <option value=\"Chapter 6\">Chapter 6</option>\n      <option value=\"Chapter 7\">Chapter 7</option>\n      <option value=\"Chapter 8\">Chapter 8</option>\n      <option value=\"Chapter 9\">Chapter 9</option>\n      <option value=\"Chapter 10\">Chapter 10</option>\n      <option value=\"Chapter 11\">Chapter 11</option>\n      <option value=\"Chapter 12\">Chapter 12</option>\n    </select>"
+if upload_fields_old not in app_source:
+    raise SystemExit('Could not find the original PDF upload metadata fields.')
+app_source = app_source.replace(upload_fields_old, upload_fields_new, 1)
+upload_inputs_old = "  const category = $(\"#upload-custom-category\")?.value.trim() || $(\"#upload-category\")?.value || \"Other\";\n  const collection = $(\"#upload-collection\")?.value.trim() || \"\";\n  const description = $(\"#upload-description\")?.value || \"\";\n  const tags = ($(\"#upload-tags\")?.value || \"\").split(\",\").map(s=>s.trim()).filter(Boolean);"
+upload_inputs_new = "  const subject = $(\"#upload-subject\")?.value || \"Botany\";\n  const chapter = $(\"#upload-chapter\")?.value || \"Chapter 1\";\n  const title = subject + \" — \" + chapter;\n  const category = subject;\n  const collection = \"\";\n  const description = \"\";\n  const tags = [];"
+if upload_inputs_old not in app_source:
+    raise SystemExit('Could not find the original PDF upload metadata variables.')
+app_source = app_source.replace(upload_inputs_old, upload_inputs_new, 1)
+upload_title_old = "      const metadata = { title: files.length === 1 ? ($(\"#upload-title\")?.value || file.name.replace(/\\.pdf$/i,\"\")) : file.name.replace(/\\.pdf$/i,\"\"), description, category, collection, tags, sha256: hash };"
+upload_title_new = "      const metadata = { title, description, category, collection, tags, subject, chapter, sha256: hash };"
+if upload_title_old not in app_source:
+    raise SystemExit('Could not find the original PDF upload title construction.')
+app_source = app_source.replace(upload_title_old, upload_title_new, 1)
+chapter_filter = "document.addEventListener(\"change\", event => {\n  if (!event.target || event.target.id !== \"upload-subject\") return;\n  const chapterSelect = document.querySelector(\"#upload-chapter\");\n  if (!chapterSelect) return;\n  const chapterCounts = {\n    \"Botany\": 12,\n    \"Zoology\": 12,\n    \"Physics 1st Paper\": 10,\n    \"Physics 2nd Paper\": 11,\n    \"Chemistry 1st Paper\": 5,\n    \"Chemistry 2nd Paper\": 5\n  };\n  const count = chapterCounts[event.target.value] || 1;\n  chapterSelect.innerHTML = Array.from({ length: count }, (_, index) => {\n    const label = \"Chapter \" + (index + 1);\n    return '<option value=\"' + label + '\">' + label + '</option>';\n  }).join(\"\");\n});"
+if 'event.target.id !== "upload-subject"' not in app_source:
+    app_source += '\n' + chapter_filter + '\n'
 app.write_text(app_source, encoding='utf-8')
 
 # Inject the owner-only file import controls.
@@ -711,17 +730,5 @@ if not matched:
 worker.write_text(worker_source.replace(matched, new_cache), encoding='utf-8')
 
 
-
-# Temporary uploader diagnostics: inspect complete renderer and metadata handlers.
-for term, limit in [
-    ("function renderUpload(prepare = false)", 9000),
-    ("async function processSelectedFiles(mode)", 10000),
-    ('document.addEventListener("change"', 3500),
-    ('document.addEventListener("click"', 3500)
-]:
-    pos = app_source.find(term)
-    if pos >= 0:
-        print("\\n--- UPLOAD FLOW " + term + " ---")
-        print(app_source[pos:pos+limit])
 
 print('Applied owner-session preservation and manual encrypted configuration import.')
