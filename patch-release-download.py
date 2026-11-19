@@ -44,6 +44,17 @@ if old_download not in source:
     raise SystemExit('Expected original downloadAsset function not found.')
 module.write_text(source.replace(old_download, new_download), encoding='utf-8')
 
+# Temporary diagnostics for login and release API usage.
+for term in ("fetchLatestConfig", "listReleases", "getRelease", "syncFromGithub", "fetchReleases", "getReleaseByTag"):
+    for pos in [m.start() for m in re.finditer(re.escape(term), source, re.I)][:3]:
+        print("\\n--- GITHUB API DIAG " + term + " ---")
+        print(source[max(0,pos-1000):min(len(source),pos+2600)])
+for term in ("fetchLatestConfig", "syncFromGithub", "state.client", "new GitHubClient"):
+    for pos in [m.start() for m in re.finditer(re.escape(term), app_source, re.I)][:3]:
+        print("\\n--- APP API DIAG " + term + " ---")
+        print(app_source[max(0,pos-1000):min(len(app_source),pos+3200)])
+
+
 # Add a manual import route for the tiny encrypted control JSON file. This
 # does not initialize a new vault or alter the published Release.
 app = Path('public/app.js')
