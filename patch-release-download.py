@@ -48,13 +48,6 @@ module.write_text(source.replace(old_download, new_download), encoding='utf-8')
 # does not initialize a new vault or alter the published Release.
 app = Path('public/app.js')
 app_source = app.read_text(encoding='utf-8')
-# TEMP reader-flow diagnostics: emit only focused app-code excerpts in the Actions log.
-for term in ("URL.createObjectURL", "iframe", "window.open", "application/pdf", "pdf-viewer", "reader", "Read", "readPdf", "openReader", "showReader", "renderPdf"):
-    positions = [m.start() for m in re.finditer(re.escape(term), app_source, re.IGNORECASE)]
-    if positions:
-        print("READER_DIAG", term, "count=", len(positions))
-        for pos in positions[:2]:
-            print(app_source[max(0, pos-280):min(len(app_source), pos+650)].replace("\\n", " ")[:950])
 verify_marker = 'async function verifyLockOwnerAction() {'
 helper = '''async function importOwnerConfigFile() {
   if (!state.isOwner || !state.token) {
@@ -236,6 +229,29 @@ fallback_new = fallback_line + '\n  target.insertAdjacentHTML("beforeend", \'<di
 if fallback_line not in app_source:
     raise SystemExit('Expected encrypted download markup not found.')
 app_source = app_source.replace(fallback_line, fallback_new, 1)
+
+# Remove the Reader modal's explicit Download and Print buttons and
+# their click handlers. Keep the Close button and native reading frame.
+reader_action_pattern = r'<button id="reader-download" class="secondary-btn">.*?</button>\s*<button id="reader-print" class="secondary-btn">.*?</button>'
+app_source, reader_action_count = re.subn(
+    reader_action_pattern,
+    '',
+    app_source,
+    count=1,
+    flags=re.S
+)
+if reader_action_count != 1:
+    raise SystemExit(f'Expected to remove one Reader Download/Print button pair, found {reader_action_count}.')
+
+reader_handlers = '''    $("#reader-download").addEventListener("click", ()=>downloadDecrypted(url, doc.descriptor.originalFilename || title));
+    $("#reader-print").addEventListener("click", ()=>{
+      const frame = $("#reader-frame");
+      try { frame.contentWindow.focus(); frame.contentWindow.print(); } catch { window.open(url, "_blank", "noopener"); }
+    });
+'''
+if reader_handlers not in app_source:
+    raise SystemExit('Expected Reader Download/Print click handlers not found.')
+app_source = app_source.replace(reader_handlers, '', 1)
 
 app.write_text(app_source, encoding='utf-8')
 
@@ -475,7 +491,7 @@ if 'id="pvault-readonly-guard"' not in index_source:
 worker = Path('public/service-worker.js')
 worker_source = worker.read_text(encoding='utf-8')
 old_caches = ('personal-pdf-vault-shell-v1', 'personal-pdf-vault-shell-v2-owner-lock')
-new_cache = 'personal-pdf-vault-shell-v9-reader-toolbar-hidden'
+new_cache = 'personal-pdf-vault-shell-v10-reader-download-print-removed'
 matched = next((name for name in old_caches if name in worker_source), None)
 if not matched:
     raise SystemExit('Expected original service worker cache name not found.')
