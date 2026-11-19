@@ -66,14 +66,14 @@ new = r'''  async uploadPair(pair) {
       await put("ready.json", btoa(manifestBinary));
       ready = true;
 
-      for (let attempt=0; attempt<60; attempt++) {
+      for (let attempt=0; attempt<150; attempt++) {
         const currentAssets = await this.listAssets(release.id);
         const pdfAsset = currentAssets.find(a=>a.name===pair.assetFileName && a.state==="uploaded");
         const metaAsset = currentAssets.find(a=>a.name===pair.sidecarFileName && a.state==="uploaded");
         if (pdfAsset && metaAsset) return {release,pdfAsset,metaAsset,staged:true};
         await new Promise(resolve=>setTimeout(resolve,2000));
       }
-      throw new Error("Encrypted files were staged, but GitHub Actions did not confirm the Release upload within 120 seconds. Check Actions: Publish encrypted Vault staging upload. Branch: " + branch);
+      throw new Error("Encrypted files were staged, but GitHub Actions did not confirm the Release upload within 300 seconds. Check Actions: Publish encrypted Vault staging upload. Branch: " + branch);
     } catch (error) {
       if (created && !ready) {
         try { await this.request(repoPath + "/git/refs/heads/" + branch,{method:"DELETE"}); } catch (_) {}
