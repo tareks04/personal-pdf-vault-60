@@ -160,3 +160,20 @@ for jsfile in Path('public').rglob('*.js'):
         for i in hits:
             for j in range(max(0,i-3), min(len(rows),i+7)):
                 print(f'B64 {j+1}: {rows[j][:500]}')
+
+# TEMP: inspect the reader, local cache and asset-download paths.
+for jsfile in Path('public').rglob('*.js'):
+    try:
+        rows = jsfile.read_text(encoding='utf-8').splitlines()
+    except Exception:
+        continue
+    candidates = [i for i,row in enumerate(rows) if re.search(r'not cached|cached on this device|getCachedPair|saveCachedPair|decryptPdfBlob|data-action.*read|openDocument|readDocument|async function.*read|browser_download_url|downloadAsset|fetchAsset|asset.*blob|cache.*asset', row, re.I)]
+    if candidates:
+        print('READFLOW FILE:', jsfile)
+        shown = set()
+        for i in candidates[:80]:
+            lo, hi = max(0, i-4), min(len(rows), i+9)
+            if any(j in shown for j in range(lo,hi)): continue
+            for j in range(lo,hi):
+                shown.add(j)
+                print(f'READFLOW {j+1}: {rows[j][:500]}')
