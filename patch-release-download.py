@@ -48,6 +48,13 @@ module.write_text(source.replace(old_download, new_download), encoding='utf-8')
 # does not initialize a new vault or alter the published Release.
 app = Path('public/app.js')
 app_source = app.read_text(encoding='utf-8')
+# TEMP reader-flow diagnostics: emit only focused app-code excerpts in the Actions log.
+for term in ("URL.createObjectURL", "iframe", "window.open", "application/pdf", "pdf-viewer", "reader", "Read", "readPdf", "openReader", "showReader", "renderPdf"):
+    positions = [m.start() for m in re.finditer(re.escape(term), app_source, re.IGNORECASE)]
+    if positions:
+        print("READER_DIAG", term, "count=", len(positions))
+        for pos in positions[:2]:
+            print(app_source[max(0, pos-280):min(len(app_source), pos+650)].replace("\\n", " ")[:950])
 verify_marker = 'async function verifyLockOwnerAction() {'
 helper = '''async function importOwnerConfigFile() {
   if (!state.isOwner || !state.token) {
