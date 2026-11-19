@@ -135,10 +135,11 @@ worker.write_text(worker_source.replace(matched, new_cache), encoding='utf-8')
 
 print('Applied owner-session preservation and manual encrypted configuration import.')
 
-# TEMP: inspect unlock form handler and state initialization.
+# TEMP: print the normal unlock flow to verify that imported configuration
+# is consumed before any additional public Release fetch.
 app_rows = Path('public/app.js').read_text(encoding='utf-8').splitlines()
 for i, row in enumerate(app_rows):
-    if re.search(r'unlock-form|unlockVault|unlock-password|async function unlock|function unlock', row, re.I):
+    if any(term in row for term in ['unlock-form', 'unlockVault', 'unlock-password', 'unlock-vault']):
         print(f'UNLOCK HIT {i+1}: {row[:500]}')
         for j in range(max(0,i-3), min(len(app_rows),i+8)):
             print(f'UNLOCK {j+1}: {app_rows[j][:500]}')
