@@ -67,8 +67,8 @@ helper = '''async function importOwnerConfigFile() {
     }
     state.config = config;
     localStorage.setItem("pvault-public-config", JSON.stringify(config));
-    togglePanel("recovery");
-    showMessage("Configuration file লোড হয়েছে। এখন Recovery Key দিয়ে Vault পুনরুদ্ধার করুন।", "success");
+    togglePanel(null);
+    showMessage("বিদ্যমান Vault configuration লোড হয়েছে। Recovery Key প্রয়োজন নেই, যদি আপনার বর্তমান Master Password মনে থাকে। এখন উপরের Master Password দিয়ে Unlock করুন।", "success");
   } catch (error) {
     showMessage("Configuration file গ্রহণ করা যায়নি: " + (error.message || "Invalid JSON"), "error");
   }
@@ -134,12 +134,3 @@ if not matched:
 worker.write_text(worker_source.replace(matched, new_cache), encoding='utf-8')
 
 print('Applied owner-session preservation and manual encrypted configuration import.')
-
-# TEMP: print the normal unlock flow to verify that imported configuration
-# is consumed before any additional public Release fetch.
-app_rows = Path('public/app.js').read_text(encoding='utf-8').splitlines()
-for i, row in enumerate(app_rows):
-    if any(term in row for term in ['unlock-form', 'unlockVault', 'unlock-password', 'unlock-vault']):
-        print(f'UNLOCK HIT {i+1}: {row[:500]}')
-        for j in range(max(0,i-3), min(len(app_rows),i+8)):
-            print(f'UNLOCK {j+1}: {app_rows[j][:500]}')
