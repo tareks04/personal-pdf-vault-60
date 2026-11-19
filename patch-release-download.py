@@ -507,6 +507,7 @@ readonly_markup = r"""<style id="pvault-readonly-style">
 }
 @media print {
   body.pvault-reader-print-block * { display: none !important; }
+  #reader-modal, #reader-modal * { display: none !important; }
 }
 </style>
 <script id="pvault-readonly-guard">
@@ -575,8 +576,14 @@ readonly_markup = r"""<style id="pvault-readonly-style">
   }
 
   function scan() {
+    const readerModal = document.querySelector("#reader-modal");
+    if (readerModal && !readerModal.classList.contains("pvault-readonly-root")) {
+      readerModal.classList.add("pvault-readonly-root");
+      roots.push(readerModal);
+    }
+
     document.querySelectorAll(
-      'iframe,object,embed,.pdfViewer,#viewerContainer,' +
+      'iframe,object,embed,.pdfViewer,#viewerContainer,'
       '[class*="pdf-viewer"],[id*="pdf-viewer"],[class*="pdf-reader"],[id*="pdf-reader"]'
     ).forEach(node => {
       const src = [
