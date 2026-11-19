@@ -24,6 +24,8 @@ jobs:
           mkdir -p public
           cat bundle/part{01..12} | base64 -d | tar -xJ -C public
           test -f public/index.html
+      - name: Fix public Release asset downloads
+        run: python3 patch-release-download.py
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload Pages artifact
