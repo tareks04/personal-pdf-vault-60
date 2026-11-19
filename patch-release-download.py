@@ -49,16 +49,18 @@ for term in ("fetchLatestConfig", "listReleases", "getRelease", "syncFromGithub"
     for pos in [m.start() for m in re.finditer(re.escape(term), source, re.I)][:3]:
         print("\\n--- GITHUB API DIAG " + term + " ---")
         print(source[max(0,pos-1000):min(len(source),pos+2600)])
-for term in ("fetchLatestConfig", "syncFromGithub", "state.client", "new GitHubClient"):
-    for pos in [m.start() for m in re.finditer(re.escape(term), app_source, re.I)][:3]:
-        print("\\n--- APP API DIAG " + term + " ---")
-        print(app_source[max(0,pos-1000):min(len(app_source),pos+3200)])
 
 
 # Add a manual import route for the tiny encrypted control JSON file. This
 # does not initialize a new vault or alter the published Release.
 app = Path('public/app.js')
 app_source = app.read_text(encoding='utf-8')
+
+for term in ("syncFromGithub", "getLatestConfig", "unlockWithPassword", "verifyLockOwnerAction"):
+    for pos in [m.start() for m in re.finditer(re.escape(term), app_source, re.I)][:2]:
+        print("\\n--- APP API DIAG " + term + " ---")
+        print(app_source[max(0,pos-700):min(len(app_source),pos+2500)])
+
 verify_marker = 'async function verifyLockOwnerAction() {'
 helper = '''async function importOwnerConfigFile() {
   if (!state.isOwner || !state.token) {
