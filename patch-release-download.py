@@ -237,6 +237,31 @@ transformations = [
         'do not show a success toast for failed uploads'
     )
 ]
+# Include exact upload failure reasons in the visible toast.
+old, new, label = transformations[2]
+transformations[2] = (old, new.replace(
+    '  let uploadFallbackCount = 0;',
+    '  let uploadFallbackCount = 0;\n  const uploadErrors = [];'
+), label)
+
+old, new, label = transformations[4]
+transformations[4] = (old, new.replace(
+    '          uploadFallbackCount++;',
+    '          uploadFallbackCount++;\n          uploadErrors.push("Owner Token is not available in this session. Verify Owner Access again.");'
+), label)
+
+old, new, label = transformations[6]
+transformations[6] = (old, new.replace(
+    '            uploadFallbackCount++;',
+    '            uploadFallbackCount++;\n            uploadErrors.push(error?.message || "Unknown upload error");'
+), label)
+
+old, new, label = transformations[7]
+transformations[7] = (old, new.replace(
+    'toast(message, "error");',
+    'toast(message + (uploadErrors.length ? " কারণ: " + uploadErrors.join(" | ") : ""), "error");'
+), label)
+
 for old_text, new_text, description in transformations:
     if old_text not in app_source:
         raise SystemExit('Expected app.js section not found: ' + description)
@@ -750,7 +775,7 @@ if 'id="pvault-readonly-guard"' not in index_source:
 worker = Path('public/service-worker.js')
 worker_source = worker.read_text(encoding='utf-8')
 old_caches = ('personal-pdf-vault-shell-v1', 'personal-pdf-vault-shell-v2-owner-lock')
-new_cache = 'personal-pdf-vault-shell-v14-owner-token-diagnostic'
+new_cache = 'personal-pdf-vault-shell-v15-upload-error-details'
 matched = next((name for name in old_caches if name in worker_source), None)
 if not matched:
     raise SystemExit('Expected original service worker cache name not found.')
