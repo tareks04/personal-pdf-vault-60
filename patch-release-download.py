@@ -218,11 +218,10 @@ transformations = [
         'track previous local-only copy for retry'
     ),
     (
-        '        if (!state.token) {\n          appendEncryptedDownloads(results, pair, T("noToken"));',\n        '        if (!state.token) {\n          uploadFallbackCount++;\n          results?.insertAdjacentHTML("beforeend", "<div class=\"warning-box\">Owner Token এই browser tab-এ verify করা নেই। Owner Access Token দিয়ে আবার Verify করুন, তারপর PDF upload retry করুন।</div>");\n          appendEncryptedDownloads(results, pair, T("noToken"));',
+        '        if (!state.token) {\n          appendEncryptedDownloads(results, pair, T("noToken"));',
         '        if (!state.token) {\n          uploadFallbackCount++;\n          appendEncryptedDownloads(results, pair, T("noToken"));',
         'count missing-token upload'
-    ),
-    (
+    ),    (
         '            upsertDoc({ ...record, ...parsed, ...cloudCache });\n            results?.insertAdjacentHTML("beforeend", `<div class="success-box">${esc(file.name)} — ${T("success")}</div>`);',
         '            for (const stale of priorLocalOnly) {\n              await deleteCachedPair(stale.assetId).catch(() => {});\n              state.docs = state.docs.filter(d => d.assetId !== stale.assetId);\n            }\n            upsertDoc({ ...record, ...parsed, ...cloudCache });\n            uploadSuccessCount++;\n            results?.insertAdjacentHTML("beforeend", `<div class="success-box">${esc(file.name)} — ${T("success")}</div>`);',
         'count confirmed upload and replace previous local-only copy'
