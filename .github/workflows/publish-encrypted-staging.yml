@@ -1,0 +1,26 @@
+name: Publish encrypted Vault staging upload
+
+on:
+  push:
+    branches: ["pvault-upload-*"]
+    paths:
+      - "upload-staging/**/ready.json"
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: pvault-upload-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout encrypted staging branch
+        uses: actions/checkout@v4
+      - name: Publish encrypted files to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 publish-staged-release.py
