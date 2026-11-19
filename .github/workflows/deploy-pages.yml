@@ -24,6 +24,25 @@ jobs:
           mkdir -p public
           cat bundle/part{01..12} | base64 -d | tar -xJ -C public
           test -f public/index.html
+      - name: Inspect generated upload flow (temporary)
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for filename in ["public/modules/github.js", "public/app.js"]:
+              path = Path(filename)
+              source = path.read_text(encoding="utf-8")
+              lines = source.splitlines()
+              print(f"\\n===== {filename} =====")
+              needles = ("upload", "release") if filename.endswith("github.js") else ("processSelectedFiles", "appendEncryptedDownloads", "uploadEncryptedPair")
+              indexes = [i for i,line in enumerate(lines) if any(word in line.lower() for word in needles) and ("async " in line or "function " in line or "=>" in line)]
+              seen = set()
+              for i in indexes[:12]:
+                  start=max(0,i-2); end=min(len(lines),i+55)
+                  if any(j in seen for j in range(start,end)): continue
+                  seen.update(range(start,end))
+                  print(f"\\n--- lines {start+1}-{end} ---")
+                  print("\\n".join(f"{j+1}: {lines[j]}" for j in range(start,end)))
+          PY
       - name: Build public Vault index with GitHub Actions token
         env:
           GH_TOKEN: ${{ github.token }}
