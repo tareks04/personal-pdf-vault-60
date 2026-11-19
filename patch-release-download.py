@@ -55,3 +55,9 @@ if not matched_cache:
     raise SystemExit('Expected service worker cache version was not found.')
 worker.write_text(worker_source.replace(matched_cache, new_cache), encoding='utf-8')
 print('Patched GitHub Release asset download and bumped the service-worker cache.')
+# TEMP: expose local function structure in Actions logs to diagnose the owner-verification call path.
+import re
+lines = source.splitlines()
+for i, line in enumerate(lines):
+    if re.search(r'owner|verify|downloadAsset|release', line, re.I):
+        print(f'SOURCE {i+1}: ' + line[:300])
