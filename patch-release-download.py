@@ -267,7 +267,13 @@ readonly_markup = r"""<style id="pvault-readonly-style">
 .pvault-readonly-root .print,
 .pvault-readonly-root .share,
 .pvault-readonly-root [data-l10n-id="download"],
-.pvault-readonly-root [data-l10n-id="print"] {
+.pvault-readonly-root [data-l10n-id="print"],
+.pvault-readonly-root [aria-label*="download" i],
+.pvault-readonly-root [aria-label*="print" i],
+.pvault-readonly-root [title*="download" i],
+.pvault-readonly-root [title*="print" i],
+.pvault-readonly-root [data-action*="download" i],
+.pvault-readonly-root [data-action*="print" i] {
   display: none !important;
 }
 @media print {
@@ -295,11 +301,18 @@ readonly_markup = r"""<style id="pvault-readonly-style">
 
   function markRoot(node) {
     if (!node || !node.isConnected) return;
+    // Prefer the complete dialog/modal, not the inner iframe wrapper:
+    // PDF action buttons are often siblings of the actual PDF frame.
     let root = node.closest(
-      'dialog,[role="dialog"],.modal,.reader,.pdf-reader,.pdf-viewer,' +
-      '[class*="reader"],[id*="reader"],[class*="pdf-viewer"],[id*="pdf-viewer"]'
+      'dialog,[role="dialog"],[class*="modal"],[id*="modal"],' +
+      '[class*="preview"],[id*="preview"],[class*="reader"],[id*="reader"]'
     );
-    if (!root) root = node.parentElement || node;
+    if (!root) {
+      root = node;
+      for (let level = 0; level < 5 && root.parentElement; level++) {
+        root = root.parentElement;
+      }
+    }
     if (!(root instanceof Element)) return;
     if (!root.classList.contains("pvault-readonly-root")) {
       root.classList.add("pvault-readonly-root");
@@ -455,7 +468,7 @@ if 'id="pvault-readonly-guard"' not in index_source:
 worker = Path('public/service-worker.js')
 worker_source = worker.read_text(encoding='utf-8')
 old_caches = ('personal-pdf-vault-shell-v1', 'personal-pdf-vault-shell-v2-owner-lock')
-new_cache = 'personal-pdf-vault-shell-v8-reader-view-only'
+new_cache = 'personal-pdf-vault-shell-v9-reader-toolbar-hidden'
 matched = next((name for name in old_caches if name in worker_source), None)
 if not matched:
     raise SystemExit('Expected original service worker cache name not found.')
