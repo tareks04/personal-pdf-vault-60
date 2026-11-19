@@ -22,7 +22,7 @@ jobs:
       - name: Prepare site files
         run: |
           mkdir -p public
-          base64 -d site-bundle.tgz.b64 | tar -xz -C public
+          cat bundle/part{01..12} | base64 -d | tar -xJ -C public
           test -f public/index.html
       - name: Configure Pages
         uses: actions/configure-pages@v5
