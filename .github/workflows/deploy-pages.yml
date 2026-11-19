@@ -41,6 +41,8 @@ jobs:
         run: |
           python3 patch-release-download.py
           python3 patch-upload-staging.py
+          node --check public/modules/github.js
+          python3 -m py_compile publish-staged-release.py
           node --input-type=module --check < public/app.js
           grep -q 'pdfjsLib.getDocument' public/app.js
           ! grep -q 'iframe class="reader-frame"' public/app.js
