@@ -100,3 +100,14 @@ html_text = Path('public/index.html').read_text(encoding='utf-8')
 for line_no, row in enumerate(html_text.splitlines(),1):
     if re.search(r'id="(owner|setup|recovery|reader|vault|dashboard)', row):
         print(f'HTML {line_no}: {row[:500]}')
+
+# TEMP: inspect lock screen HTML and GitHub request/config methods.
+html_rows = Path('public/index.html').read_text(encoding='utf-8').splitlines()
+print('OWNER PANEL HTML')
+for i in range(20, 62):
+    if i < len(html_rows): print(f'HTML {i+1}: {html_rows[i][:500]}')
+gh_rows = Path('public/modules/github.js').read_text(encoding='utf-8').splitlines()
+print('GITHUB CLIENT METHODS')
+for start, end in [(1, 48), (118, 166)]:
+    for i in range(start-1, min(end, len(gh_rows))):
+        print(f'GH {i+1}: {gh_rows[i][:500]}')
