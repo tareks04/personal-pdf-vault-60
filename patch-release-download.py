@@ -253,6 +253,19 @@ if reader_handlers not in app_source:
     raise SystemExit('Expected Reader Download/Print click handlers not found.')
 app_source = app_source.replace(reader_handlers, '', 1)
 
+# Temporary deployment diagnostics: expose the actual reader implementation
+# in GitHub Actions logs so the custom PDF.js renderer can be patched safely.
+for needle in ("reader-frame", "reader-modal", "reader-title", "openReader", "showReader"):
+    positions = [m.start() for m in re.finditer(re.escape(needle), app_source, re.I)]
+    for pos in positions[:4]:
+        print("\\n--- APP READER DIAGNOSTIC: " + needle + " @ " + str(pos) + " ---")
+        print(app_source[max(0, pos - 1400):min(len(app_source), pos + 2600)])
+print("\\n--- HTML READER DIAGNOSTIC ---")
+for needle in ("reader-frame", "reader-modal"):
+    pos = html_source.find(needle) if "html_source" in globals() else -1
+    if pos >= 0:
+        print(html_source[max(0, pos - 1200):min(len(html_source), pos + 2400)])
+
 app.write_text(app_source, encoding='utf-8')
 
 # Inject the owner-only file import controls.
