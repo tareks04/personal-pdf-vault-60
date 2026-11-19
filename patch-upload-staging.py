@@ -26,14 +26,14 @@ new = r'''  async uploadPair(pair) {
     if (!(pair.sidecarBlob instanceof Blob) || !pair.sidecarBlob.size) throw new Error("Encrypted metadata file is empty.");
     if (pair.encryptedBlob.size > 40*1024*1024 || pair.sidecarBlob.size > 8*1024*1024) throw new Error("Automatic browser upload supports encrypted PDF up to 40 MiB and metadata up to 8 MiB. Use encrypted download links for larger files.");
 
-    const { release, assets } = await this.getDataRelease();
-    if (assets.length > 997) throw new Error("This Release is too close to GitHub's 1,000-asset limit.");
     const repoPath = "/repos/" + encodeURIComponent(this.owner) + "/" + encodeURIComponent(this.repo);
     const branch = "pvault-upload-" + assetId;
     const dir = "upload-staging/" + assetId;
+    let release = null;
+    let assets = [];
     let created = false;
     let ready = false;
-    let uploadStep = "reading the repository main branch";
+    let uploadStep = "finding or creating the pdf-vault storage Release";
 
     const encodeBlob = async blob => {
       const bytes = new Uint8Array(await blob.arrayBuffer());
@@ -48,6 +48,12 @@ new = r'''  async uploadPair(pair) {
     });
 
     try {
+      const dataRelease = await this.getDataRelease();
+      release = dataRelease.release;
+      assets = dataRelease.assets || [];
+      if (assets.length > 997) throw new Error("This Release is too close to GitHub's 1,000-asset limit.");
+
+      uploadStep = "reading the repository main branch";
       const mainRef = await this.request(repoPath + "/git/ref/heads/main");
       if (!mainRef?.object?.sha) throw new Error("Could not read the main branch commit.");
       uploadStep = "creating the encrypted staging branch";
