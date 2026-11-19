@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 # Patch the Release asset downloader. No Authorization header is sent for
 # public assets; write operations still use the Owner token in GitHubClient.
