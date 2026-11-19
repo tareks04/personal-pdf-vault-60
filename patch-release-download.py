@@ -86,3 +86,17 @@ for start, end in [(715, 750), (875, 890)]:
     print(f'APP CONTEXT {start}-{end}')
     for i in range(start-1, min(end, len(app_lines))):
         print(f'APP {i+1}: {app_lines[i][:500]}')
+
+# TEMP: locate panel navigation definitions and HTML IDs.
+app_text = Path('public/app.js').read_text(encoding='utf-8')
+app_rows = app_text.splitlines()
+for i, row in enumerate(app_rows):
+    if re.search(r'function togglePanel|const togglePanel|function render\(|function showMessage|function renderDashboard|togglePanel\(', row):
+        lo, hi = max(0, i-2), min(len(app_rows), i+10)
+        print(f'PANEL CONTEXT at {i+1}')
+        for j in range(lo, hi):
+            print(f'APP {j+1}: {app_rows[j][:500]}')
+html_text = Path('public/index.html').read_text(encoding='utf-8')
+for line_no, row in enumerate(html_text.splitlines(),1):
+    if re.search(r'id="(owner|setup|recovery|reader|vault|dashboard)', row):
+        print(f'HTML {line_no}: {row[:500]}')
